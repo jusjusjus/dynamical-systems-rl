@@ -4,6 +4,7 @@ from sys import path
 path.insert(0, '..')
 import lorenz
 from lorenz.util import Transition
+from lorenz.util import unfold
 import random
 import math
 
@@ -77,23 +78,24 @@ class DQN(nn.Module):
         return self.dense2(x)
 
 
-def plot_episode_returns():
+def plot_episode_returns(returns, num_avg=100, stride=1):
+    assert num_avg>stride
     plt.figure(2)
     plt.clf()
-    returns_tensor = torch.tensor(episode_returns, dtype=torch.float)
+    returns = np.asarray(returns)
     plt.title('Training...')
     plt.xlabel('Episode')
     plt.ylabel('Duration')
-    plt.plot(returns_tensor.numpy())
-    # Take 100 episode averages and plot them too
-    if len(returns_tensor) >= 100:
-        means = returns_tensor.unfold(0, 100, 1).mean(1).view(-1)
-        means = torch.cat((torch.zeros(99), means))
-        plt.plot(means.numpy())
+    plt.plot(returns)
+    # Take episode averages and plot them too
+    if len(returns) >= num_avg:
+        means = unfold(returns, 0, num_avg, stride).mean(1)
+        # means = np.concatenate((np.zeros(num_avg-stride), means))
+        plt.plot((num_avg-stride)+np.arange(means.size), means)
 
     plt.pause(0.001)  # pause a bit so that plots are updated
 
-def optimize_model():
+def optimize_model(memory, policy_net, target_net):
     if len(memory) < BATCH_SIZE:
         return
     transitions = memory.sample(BATCH_SIZE)
@@ -103,7 +105,7 @@ def optimize_model():
 
     # Compute a mask of non-final states
     non_final_mask = torch.tensor(
-            tuple(map(lambda s: s is not None, batch.next_state)),
+            list(map(lambda s: s is not None, batch.next_state)),
             device=device, dtype=torch.uint8)
     # .. and concatenate the batch elements
     non_final_next_states = torch.cat([
@@ -116,21 +118,22 @@ def optimize_model():
     # columns of actions taken
     state_action_values = policy_net(state_batch).gather(1, action_batch)
 
-    # Compute V(s_{t+1}) for all next states.
+    # Compute V(s_{t+1}) for all non-final states.
+    # Final states get the value zero
     next_state_values = torch.zeros(BATCH_SIZE, device=device)
     next_state_values[non_final_mask] = target_net(non_final_next_states).max(1)[0].detach()
-    # Compute the expected Q values
-    expected_state_action_values = (next_state_values * GAMMA) + reward_batch
+    # Compute the expected Q values: `Q = r + g V(s_{t+1})`
+    expected_state_action_values = reward_batch + GAMMA * next_state_values
 
     # Compute Huber loss
     loss = F.smooth_l1_loss(state_action_values, expected_state_action_values.unsqueeze(1))
 
-    # Optimize the model
-    optimizer.zero_grad()
+    # Optimize the policy net
+    optimize_policy_net.zero_grad()
     loss.backward()
     for param in policy_net.parameters():
         param.grad.data.clamp_(-1, 1)
-    optimizer.step()
+    optimize_policy_net.step()
 
 
 BATCH_SIZE = 128
@@ -145,7 +148,7 @@ target_net = DQN().to(device)
 target_net.load_state_dict(policy_net.state_dict())
 target_net.eval()
 
-optimizer = optim.RMSprop(policy_net.parameters(), lr=1e-5)
+optimize_policy_net = optim.RMSprop(policy_net.parameters(), lr=1e-5)
 memory = ReplayMemory(10000)
 
 episode_returns = []
@@ -174,11 +177,11 @@ for i_episode in range(num_episodes):
         last_state = next_state
 
         # Perform one step of the optimization (on the target network)
-        optimize_model()
+        optimize_model(memory, policy_net, target_net)
         if done:
             env.render()
             episode_returns.append(episode_return)
-            plot_episode_returns()
+            plot_episode_returns(episode_returns)
             break
     # Update the target network
     if i_episode % TARGET_UPDATE == 0:
