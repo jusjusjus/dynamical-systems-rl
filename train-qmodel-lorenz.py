@@ -35,14 +35,14 @@ class ReplayMemory:
     def __init__(self, capacity):
         self.capacity = capacity
         self.memory = []
-        self.position = 0
+        self.stack_idx = 0
 
     def push(self, state, action, next_state, reward):
-        """Saves a transition."""
+        """save a transition."""
         if len(self.memory) < self.capacity:
             self.memory.append(None)
-        self.memory[self.position] = Transition(state, action, next_state, reward)
-        self.position = (self.position + 1) % self.capacity
+        self.memory[self.stack_idx] = Transition(state, action, next_state, reward)
+        self.stack_idx = (self.stack_idx + 1) % self.capacity
 
     def sample(self, batch_size):
         return random.sample(self.memory, batch_size)
@@ -95,14 +95,30 @@ def plot_episode_returns(returns, num_avg=100, stride=1):
 
     plt.pause(0.001)  # pause a bit so that plots are updated
 
-def optimize_model(memory, policy_net, target_net):
+def optimize_model(memory, policy_net, target_net, pnet_optimizer):
+    """perform one optimization step on the policy network.
+
+    1.  Sample the memory.  Each element has state $s_t$, action $a_t$, next
+    state $s_{t+1}$, and reward $r_{t+1}$.
+
+    2.  Compute the state-action fn, $Q(s_t, a_t)$, using `policy_net`.
+
+    3.  Compute the value fn, $V(s_{t+1})=\max_{a} Q(s_{t+1}, a)$, using
+    `target_net`.
+
+    4.  Compute the expected state-action fn,
+    $Q_e(s_t,a_t)=r_{t+1}+V(s_{t+1})\gamma$.  $\gamma$ is a discount.
+
+    5.  Compute the Huber loss of $Q_e(s_t,a_t)-Q(s_t,a_t)$,
+    and optimize using `pnet_optimizer`.
+    """
     if len(memory) < BATCH_SIZE:
         return
-    transitions = memory.sample(BATCH_SIZE)
-    # Transpose the batch (see http://stackoverflow.com/a/19343/3343043 for
-    # detailed explanation).
-    batch = Transition(*zip(*transitions))
-
+    # Step 1:
+    # get list of transitions and transpose it to
+    # an `Transition` tuple of lists:
+    list_of_transitions = memory.sample(BATCH_SIZE)
+    batch = Transition.transpose(list_of_transitions)
     # Compute a mask of non-final states
     non_final_mask = torch.tensor(
             list(map(lambda s: s is not None, batch.next_state)),
@@ -113,27 +129,26 @@ def optimize_model(memory, policy_net, target_net):
     state_batch = torch.cat(batch.state)
     action_batch = torch.cat(batch.action)
     reward_batch = torch.cat(batch.reward)
-
-    # Compute Q(s_t, a) - the model computes Q(s_t), then we select the
-    # columns of actions taken
+    # Step 2:
+    # $Q(s_t, a_t)$
     state_action_values = policy_net(state_batch).gather(1, action_batch)
-
-    # Compute V(s_{t+1}) for all non-final states.
-    # Final states get the value zero
+    # Step 3:
+    # $V(s_{s+1})=\max_{a} Q(s_{t+1}, a)$
+    # (final states get value zero)
     next_state_values = torch.zeros(BATCH_SIZE, device=device)
     next_state_values[non_final_mask] = target_net(non_final_next_states).max(1)[0].detach()
-    # Compute the expected Q values: `Q = r + g V(s_{t+1})`
+    # Step 4:
+    # $Q_e(s_t,a_t) = r_{t+1} + \gamma V(s_{t+1})$
     expected_state_action_values = reward_batch + GAMMA * next_state_values
-
+    # Step 5:
     # Compute Huber loss
     loss = F.smooth_l1_loss(state_action_values, expected_state_action_values.unsqueeze(1))
-
     # Optimize the policy net
-    optimize_policy_net.zero_grad()
+    pnet_optimizer.zero_grad()
     loss.backward()
     for param in policy_net.parameters():
         param.grad.data.clamp_(-1, 1)
-    optimize_policy_net.step()
+    pnet_optimizer.step()
 
 
 BATCH_SIZE = 128
@@ -176,8 +191,8 @@ for i_episode in range(num_episodes):
         # Move to the next state
         last_state = next_state
 
-        # Perform one step of the optimization (on the target network)
-        optimize_model(memory, policy_net, target_net)
+        # Optimize the policy network (one step)
+        optimize_model(memory, policy_net, target_net, optimize_policy_net)
         if done:
             env.render()
             episode_returns.append(episode_return)
