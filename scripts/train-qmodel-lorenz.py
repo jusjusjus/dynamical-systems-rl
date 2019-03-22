@@ -1,21 +1,23 @@
-import numpy as np
-import gym
-from sys import path
-path.insert(0, '..')
-import lorenz
-from lorenz.util import Transition
-from lorenz.util import unfold
-import random
-import math
 
-import matplotlib.pyplot as plt
-from collections import namedtuple
+from sys import path
+path.insert(0, '.')
+import random
 from itertools import count
+from collections import namedtuple
+
+import gym
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 import torchvision.transforms as T
+import matplotlib.pyplot as plt
+
+import lorenz
+from lorenz.util import Transition
+from lorenz.util import unfold
+
 
 ENV_NAME = 'Lorenz-v0'
 # Batch size is sampled from the experience
@@ -57,7 +59,7 @@ def select_action(state):
     global steps_done
     sample = random.random()
     eps_threshold = EPS_END + (EPS_START - EPS_END) * \
-        math.exp(-1. * steps_done / EPS_DECAY)
+        np.exp(-steps_done / EPS_DECAY)
     steps_done += 1
     if sample > eps_threshold:
         with torch.no_grad():

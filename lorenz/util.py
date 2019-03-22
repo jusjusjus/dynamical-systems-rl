@@ -27,7 +27,7 @@ _bytes_per_dtype = {
 
 def unfold(x: np.ndarray, dim: int, size: int, step: int) -> np.ndarray:
     """returns consecutive sequences of array `x`
-    
+
     dim : dimension that indexes across sequences
     size : length of the sequence
     step : step between sequence

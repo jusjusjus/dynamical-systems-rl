@@ -6,10 +6,10 @@ from gym.envs.classic_control import rendering
 class Trace:
 
     def __init__(self, offset=0.0, marker=None):
-        self._trace = rendering.make_polyline([[0,0]])
+        self._trace = rendering.make_polyline([[0, 0]])
         self.marker = marker
         if self.marker is not None:
-            self._hline = rendering.Line(start=(0,0), end=(0,0))
+            self._hline = rendering.Line(start=(0, 0), end=(0, 0))
         else:
             self._hline = None
         self.offset = offset
@@ -34,7 +34,6 @@ class Renderer(rendering.Viewer):
     _x_start = 0
 
     def __init__(self, max_steps, screen_width=800, screen_height=400):
-        # from gym.envs.classic_control import rendering
         super().__init__(screen_width, screen_height)
         self.max_steps = max_steps
 
@@ -48,7 +47,7 @@ class Renderer(rendering.Viewer):
                 Trace(offset=(num_traces-1-i)*1.1, marker=0.0)
                 for i in range(num_traces)
             ]
-            for t, trace in enumerate(self.traces):
+            for trace in self.traces:
                 trace(self)
         return self.traces
 

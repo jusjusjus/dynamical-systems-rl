@@ -1,10 +1,15 @@
 
+from sys import path
+path.insert(0, '.')
+from itertools import count
+
 import numpy as np
+import matplotlib.pyplot as plt
+
 import gym
 import lorenz
 from lorenz.util import unfold
-from itertools import count
-import matplotlib.pyplot as plt
+
 ENV_NAME = 'Lorenz-v0'
 env = gym.make(ENV_NAME)
 np.random.seed(123)
