@@ -1,4 +1,30 @@
 
+# Dynamical Systems RL
+
+Reinforcement learning with dynamical systems.
+
+## Introduction
+
+To install run
+
+```bash
+$ conda create -n dyrl python=3.6 pip
+$ conda activate dyrl
+$ pip install -r requirements.txt
+```
+
+To tests run
+
+```bash
+$ pytest
+```
+
+To try it out run
+
+```bash
+$ python ./scripts/train-qmodel-lorenz.py
+```
+
 # Lorenz Environment
 
 ## Version 0
